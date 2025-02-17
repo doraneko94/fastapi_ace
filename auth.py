@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Form
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
 from itsdangerous import URLSafeTimedSerializer
 from database import SessionLocal
 from models import User
@@ -10,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi_mail import FastMail, MessageSchema
 import bcrypt
 import urllib.parse
+import datetime, jwt
 
 from config import config
 from consts import DOMAIN
@@ -44,6 +44,27 @@ def verify_token(token: str, salt: str, max_age=3600) -> str:
         return email
     except Exception as e:
         raise HTTPException(status_code=400, detail="無効なトークン")
+
+def create_access_token(username: str):
+    payload = {
+        "sub": username,
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=2)  # 2時間有効
+    }
+    token = jwt.encode(payload, config.SECRET_KEY, algorithm="HS256")
+    return token
+
+def get_current_user(request: Request):
+    token = request.cookies.get("access_token")
+    if not token:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    try:
+        payload = jwt.decode(token, config.SECRET_KEY, algorithms=["HS256"])
+        return payload.get("sub")
+    except jwt.ExpiredSignatureError:
+        return RedirectResponse(url="/login", status_code=303)
+    except jwt.InvalidTokenError:
+        return RedirectResponse(url="/login", status_code=303)
 
 @router.get("/")
 def home(request: Request):
@@ -103,6 +124,7 @@ def login_page(request: Request):
 
 @router.post("/login")
 def login(
+    request: Request,
     username: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db)
