@@ -131,9 +131,14 @@ def login(
 ):
     db_user = db.query(User).filter(User.username == username).first()
 
-    if not db_user or not verify_password(password, db_user.hashed_password):
-
-        raise HTTPException(status_code=400, detail="無効な認証情報")
+    if not db_user:
+        raise HTTPException(status_code=400, detail="ユーザーが見つかりません")
+    
+    if not db_user.is_verified:
+        raise HTTPException(status_code=400, detail="メール認証が完了していません")
+    
+    if not verify_password(password, db_user.hashed_password):
+        raise HTTPException(status_code=400, detail="無効なパスワード")
     
     return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
